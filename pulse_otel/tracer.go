@@ -105,6 +105,34 @@ func (t *Tracer) CreateChildSpan(ctx context.Context, spanName string, opts ...t
 	return t.tracer.Start(ctx, spanName, opts...)
 }
 
+// WithSpanReturn executes a function within a new span and returns a value
+func (t *Tracer) WithSpanReturn(ctx context.Context, spanName string, fn func(context.Context) (interface{}, error), opts ...trace.SpanStartOption) (interface{}, error) {
+	ctx, span := t.StartSpan(ctx, spanName, opts...)
+	defer span.End()
+
+	result, err := fn(ctx)
+	if err != nil {
+		t.RecordError(ctx, err)
+		return result, err
+	}
+
+	return result, nil
+}
+
+// WithSpanReturnTyped executes a function within a new span and returns a typed value
+func WithSpanReturnTyped[T any](t *Tracer, ctx context.Context, spanName string, fn func(context.Context) (T, error), opts ...trace.SpanStartOption) (T, error) {
+	ctx, span := t.StartSpan(ctx, spanName, opts...)
+	defer span.End()
+
+	result, err := fn(ctx)
+	if err != nil {
+		t.RecordError(ctx, err)
+		return result, err
+	}
+
+	return result, nil
+}
+
 // SpanHelper provides convenient span operations
 type SpanHelper struct {
 	span trace.Span
