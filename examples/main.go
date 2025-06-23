@@ -1,33 +1,92 @@
 // package main
 
 // import (
-// 	"fmt"
+// 	"context"
+// 	"log"
+// 	"time"
 
-// 	"github.com/yourusername/myutils/mathutils"
-// 	"github.com/yourusername/myutils/stringutils"
+// 	"github.com/aanshu-ss/s2-otel-instrumentation-go/otelutils"
+// 	"go.opentelemetry.io/otel/attribute"
 // )
 
 // func main() {
-// 	fmt.Println("=== String Utils Demo ===")
+// 	// Create configuration
+// 	config := otelutils.DefaultConfig()
+// 	config.ServiceName = "basic-example"
+// 	config.ServiceVersion = "1.0.0"
+// 	config.Environment = "development"
+// 	config.SetEndpoint("http://localhost:4318") // Your OTEL collector endpoint
+// 	config.AddResourceAttribute("team", "platform")
+// 	config.AddResourceAttribute("component", "example")
 
-// 	text := "hello world"
-// 	fmt.Printf("Original: %s\n", text)
-// 	fmt.Printf("Reversed: %s\n", stringutils.Reverse(text))
-// 	fmt.Printf("Capitalized: %s\n", stringutils.Capitalize(text))
-// 	fmt.Printf("Word count: %d\n", stringutils.WordCount(text))
+// 	// Initialize OpenTelemetry
+// 	otelManager, err := otelutils.NewOtelManager(config)
+// 	if err != nil {
+// 		log.Fatalf("Failed to initialize OpenTelemetry: %v", err)
+// 	}
 
-// 	palindrome := "racecar"
-// 	fmt.Printf("'%s' is palindrome: %v\n", palindrome, stringutils.IsPalindrome(palindrome))
+// 	// Ensure proper cleanup
+// 	defer func() {
+// 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+// 		defer cancel()
+// 		if err := otelManager.Shutdown(ctx); err != nil {
+// 			log.Printf("Failed to shutdown OpenTelemetry: %v", err)
+// 		}
+// 	}()
 
-// 	fmt.Println("\n=== Math Utils Demo ===")
+// 	// Create tracer and logger
+// 	tracer := otelutils.NewTracer("basic-example")
+// 	logger := otelutils.NewLogger("basic-example")
 
-// 	a, b := 15, 25
-// 	fmt.Printf("Max(%d, %d) = %d\n", a, b, mathutils.Max(a, b))
-// 	fmt.Printf("Min(%d, %d) = %d\n", a, b, mathutils.Min(a, b))
+// 	// Example usage
+// 	ctx := context.Background()
 
-// 	n := 5
-// 	fmt.Printf("Factorial(%d) = %d\n", n, mathutils.Factorial(n))
-// 	fmt.Printf("Abs(%d) = %d\n", -42, mathutils.Abs(-42))
-// 	fmt.Printf("IsEven(%d) = %v\n", 10, mathutils.IsEven(10))
-// 	fmt.Printf("IsOdd(%d) = %v\n", 7, mathutils.IsOdd(7))
+// 	// Start a new trace
+// 	ctx, span := tracer.StartSpan(ctx, "main-operation")
+// 	defer span.End()
+
+// 	// Add span attributes
+// 	tracer.AddSpanAttributes(ctx,
+// 		attribute.String("operation.type", "example"),
+// 		attribute.String("user.id", "user123"),
+// 		attribute.Int("batch.size", 100),
+// 	)
+
+// 	// Log with trace context
+// 	logger.Info(ctx, "Starting main operation",
+// 		attribute.String("component", "main"),
+// 		attribute.String("action", "start"),
+// 	)
+
+// 	// Simulate some work with child spans
+// 	simulateWork(ctx, tracer, logger)
+
+// 	logger.Info(ctx, "Completed main operation")
+
+// 	// Wait a bit for export
+// 	time.Sleep(2 * time.Second)
+// }
+
+// func simulateWork(ctx context.Context, tracer *otelutils.Tracer, logger *otelutils.Logger) {
+// 	// Create child span
+// 	err := tracer.WithSpan(ctx, "simulate-work", func(ctx context.Context) error {
+// 		// Add attributes to child span
+// 		tracer.AddSpanAttribute(ctx, "work.type", "simulation")
+// 		tracer.AddSpanAttribute(ctx, "work.duration", "1s")
+
+// 		// Log in child span context
+// 		logger.Debug(ctx, "Performing simulated work")
+
+// 		// Simulate work
+// 		time.Sleep(1 * time.Second)
+
+// 		// Log completion
+// 		logger.Info(ctx, "Work completed successfully")
+
+// 		return nil
+// 	})
+
+// 	if err != nil {
+// 		logger.Error(ctx, "Work failed", attribute.String("error", err.Error()))
+// 	}
 // }
