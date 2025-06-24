@@ -1,4 +1,4 @@
-package httpMiddleware
+package main
 
 import (
 	"context"
