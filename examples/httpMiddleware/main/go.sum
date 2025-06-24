@@ -1,5 +1,5 @@
-github.com/aanshu-ss/s2-otel-instrumentation-go v0.0.0-20250624094332-495c3a715c5d h1:uj5BbTwvEYP40hgAEiaPD0cdOMLq3TUdT+tFXuIEkxM=
-github.com/aanshu-ss/s2-otel-instrumentation-go v0.0.0-20250624094332-495c3a715c5d/go.mod h1:jB0GPjOu/HMeAjNFVlEGGCY/z5u32KDcRuYMDdN4Rmg=
+github.com/aanshu-ss/s2-otel-instrumentation-go v0.0.0-20250624095731-b7c53cc76a2b h1:F+MgqDcj2B843l3WFJbKjmj/GlmKdQWS1NNYggTM3oY=
+github.com/aanshu-ss/s2-otel-instrumentation-go v0.0.0-20250624095731-b7c53cc76a2b/go.mod h1:jB0GPjOu/HMeAjNFVlEGGCY/z5u32KDcRuYMDdN4Rmg=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=

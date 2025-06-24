@@ -9,7 +9,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
@@ -42,8 +41,8 @@ func DefaultConfig() *Config {
 // OtelManager manages OpenTelemetry providers
 type OtelManager struct {
 	tracerProvider *trace.TracerProvider
-	loggerProvider *log.LoggerProvider
-	config         *Config
+	// loggerProvider *log.LoggerProvider
+	config *Config
 }
 
 // NewOtelManager creates a new OpenTelemetry manager
@@ -170,15 +169,15 @@ func (m *OtelManager) Shutdown(ctx context.Context) error {
 		}
 	}
 
-	if m.loggerProvider != nil {
-		if shutdownErr := m.loggerProvider.Shutdown(ctx); shutdownErr != nil {
-			if err != nil {
-				err = fmt.Errorf("%w; failed to shutdown logger provider: %w", err, shutdownErr)
-			} else {
-				err = fmt.Errorf("failed to shutdown logger provider: %w", shutdownErr)
-			}
-		}
-	}
+	// if m.loggerProvider != nil {
+	// 	if shutdownErr := m.loggerProvider.Shutdown(ctx); shutdownErr != nil {
+	// 		if err != nil {
+	// 			err = fmt.Errorf("%w; failed to shutdown logger provider: %w", err, shutdownErr)
+	// 		} else {
+	// 			err = fmt.Errorf("failed to shutdown logger provider: %w", shutdownErr)
+	// 		}
+	// 	}
+	// }
 
 	return err
 }

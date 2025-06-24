@@ -3,7 +3,7 @@ module user_go_app
 go 1.24.4
 
 require (
-	github.com/aanshu-ss/s2-otel-instrumentation-go v0.0.0-20250624094332-495c3a715c5d
+	github.com/aanshu-ss/s2-otel-instrumentation-go v0.0.0-20250624095731-b7c53cc76a2b
 	go.opentelemetry.io/otel v1.30.0
 )
 

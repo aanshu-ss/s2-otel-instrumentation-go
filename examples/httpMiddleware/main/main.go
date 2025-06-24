@@ -35,7 +35,7 @@ func main() {
 	config.ServiceName = "user-api"
 	config.ServiceVersion = "1.0.0"
 	config.Environment = "development"
-	config.SetEndpoint("http://localhost:4317")
+	config.SetEndpoint("localhost:4317")
 	config.AddResourceAttribute("api.type", "rest")
 	config.AddResourceAttribute("team", "backend")
 
@@ -61,8 +61,8 @@ func main() {
 	http.Handle("/users/create", middleware.Handler(http.HandlerFunc(createUserHandler)))
 	http.Handle("/health", middleware.Handler(http.HandlerFunc(healthHandler)))
 
-	log.Println("Starting server on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Println("Starting server on :8093")
+	log.Fatal(http.ListenAndServe(":8093", nil))
 }
 
 func getUsersHandler(w http.ResponseWriter, r *http.Request) {

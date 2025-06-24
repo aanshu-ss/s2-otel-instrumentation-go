@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
-	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -34,10 +34,7 @@ func (m *HTTPMiddleware) Handler(handler http.Handler) http.Handler {
 		ctx, span := m.tracer.Start(ctx, spanName,
 			trace.WithSpanKind(trace.SpanKindServer),
 			trace.WithAttributes(
-				semconv.HTTPMethod(r.Method),
-				semconv.HTTPURL(r.URL.String()),
 				semconv.HTTPRoute(r.URL.Path),
-				semconv.HTTPScheme(r.URL.Scheme),
 			),
 		)
 		defer span.End()
@@ -54,7 +51,7 @@ func (m *HTTPMiddleware) Handler(handler http.Handler) http.Handler {
 
 		// Add response attributes
 		span.SetAttributes(
-			semconv.HTTPStatusCode(wrappedWriter.statusCode),
+			// semconv.HTTPStatusCode(wrappedWriter.statusCode),
 			attribute.Float64("http.duration_ms", float64(duration.Nanoseconds())/1000000),
 		)
 
