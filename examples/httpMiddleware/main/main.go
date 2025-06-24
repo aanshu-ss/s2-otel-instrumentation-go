@@ -35,7 +35,7 @@ func main() {
 	config.ServiceName = "user-api"
 	config.ServiceVersion = "1.0.0"
 	config.Environment = "development"
-	config.SetEndpoint("http://localhost:4318")
+	config.SetEndpoint("http://localhost:4317")
 	config.AddResourceAttribute("api.type", "rest")
 	config.AddResourceAttribute("team", "backend")
 
