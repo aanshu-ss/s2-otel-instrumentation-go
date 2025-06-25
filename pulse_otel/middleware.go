@@ -15,29 +15,51 @@ import (
 
 // HTTPMiddleware provides HTTP instrumentation middleware
 type HTTPMiddleware struct {
-	tracer trace.Tracer
+	tenantManager *TenantManager
+	serviceName   string
 }
 
-// NewHTTPMiddleware creates a new HTTP middleware
-func NewHTTPMiddleware(serviceName string) *HTTPMiddleware {
+// NewHTTPMiddleware creates a new HTTP middleware with tenant support
+func NewHTTPMiddleware(serviceName string, baseConfig *Config) *HTTPMiddleware {
 	return &HTTPMiddleware{
-		tracer: otel.Tracer(serviceName)}
+		tenantManager: NewTenantManager(baseConfig),
+		serviceName:   serviceName,
+	}
 }
 
 // Handler wraps an http.Handler with opentelemetry instrumentation
 func (m *HTTPMiddleware) Handler(handler http.Handler) http.Handler {
-
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Extract tenant ID from header
+		tenantID := r.Header.Get("x-tenant-id")
+		if tenantID == "" {
+			tenantID = "default" // fallback to default tenant
+		}
+
+		// Get tenant-specific tracer provider
+		provider, err := m.tenantManager.GetTracerProvider(tenantID)
+		if err != nil {
+			// Log error and use default behavior
+			fmt.Printf("Error getting tenant provider for %s: %v\n", tenantID, err)
+			handler.ServeHTTP(w, r)
+			return
+		}
+
+		// Create tenant-specific tracer
+		tracer := provider.Tracer(m.serviceName)
+
 		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 
 		spanName := fmt.Sprintf("%s %s", r.Method, r.URL.Path)
-		ctx, span := m.tracer.Start(ctx, spanName,
+		ctx, span := tracer.Start(ctx, spanName,
 			trace.WithSpanKind(trace.SpanKindServer),
 			trace.WithAttributes(
 				semconv.HTTPRoute(r.URL.Path),
+				attribute.String("tenant.id", tenantID),
 			),
 		)
 		defer span.End()
+
 		wrappedWriter := &responseWriter{
 			ResponseWriter: w,
 			statusCode:     http.StatusOK,
@@ -51,7 +73,6 @@ func (m *HTTPMiddleware) Handler(handler http.Handler) http.Handler {
 
 		// Add response attributes
 		span.SetAttributes(
-			// semconv.HTTPStatusCode(wrappedWriter.statusCode),
 			attribute.Float64("http.duration_ms", float64(duration.Nanoseconds())/1000000),
 		)
 
@@ -142,7 +163,7 @@ func (rw *responseWriter) Write(data []byte) (int, error) {
 // }
 
 // InstrumentHandler is a convenience function to instrument a single handler
-func InstrumentHandler(serviceName string, pattern string, handler http.HandlerFunc) (string, http.HandlerFunc) {
-	middleware := NewHTTPMiddleware(serviceName)
+func InstrumentHandler(serviceName string, pattern string, handler http.HandlerFunc, baseConfig *Config) (string, http.HandlerFunc) {
+	middleware := NewHTTPMiddleware(serviceName, baseConfig)
 	return pattern, middleware.HandlerFunc(handler)
 }

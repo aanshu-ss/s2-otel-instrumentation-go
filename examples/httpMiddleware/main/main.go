@@ -25,36 +25,32 @@ type Response struct {
 	Error   string      `json:"error,omitempty"`
 }
 
+// ...existing code...
+
 var (
-	tracer *pulse_otel.Tracer
+	tenantManager *pulse_otel.TenantManager
 )
 
 func main() {
-	// Initialize OpenTelemetry
+	// Initialize OpenTelemetry base configuration
 	config := pulse_otel.DefaultConfig()
 	config.ServiceName = "user-api"
 	config.ServiceVersion = "1.0.0"
 	config.Environment = "development"
-	config.SetEndpoint("localhost:4317")
 	config.AddResourceAttribute("api.type", "rest")
 	config.AddResourceAttribute("team", "backend")
 
-	_, err := pulse_otel.NewPulseOtelManager(config)
-	if err != nil {
-		log.Fatalf("Failed to initialize OpenTelemetry: %v", err)
-	}
+	// Initialize tenant manager
+	tenantManager = pulse_otel.NewTenantManager(config)
 
 	defer func() {
-		_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		// otelManager.Shutdown(ctx)
+		tenantManager.Shutdown(ctx)
 	}()
 
-	// Initialize tracer
-	tracer = pulse_otel.NewTracer("user-api")
-
-	// Create HTTP middleware
-	middleware := pulse_otel.NewHTTPMiddleware("user-api")
+	// Create HTTP middleware with tenant support
+	middleware := pulse_otel.NewHTTPMiddleware("user-api", config)
 
 	// Setup routes with instrumentation
 	http.Handle("/users", middleware.Handler(http.HandlerFunc(getUsersHandler)))
@@ -68,23 +64,35 @@ func main() {
 func getUsersHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Get tenant-specific tracer
+	tenantID := r.Header.Get("x-tenant-id")
+	if tenantID == "" {
+		tenantID = "default"
+	}
+
+	tracer, err := tenantManager.GetTracer(tenantID, "user-api")
+	if err != nil {
+		log.Printf("Error getting tracer for tenant %s: %v", tenantID, err)
+		writeErrorResponse(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
 	// Add custom span attributes
 	tracer.AddSpanAttributes(ctx,
 		attribute.String("handler.name", "getUsers"),
 		attribute.String("operation.type", "read"),
+		attribute.String("tenant.id", tenantID),
 	)
 
 	// Simulate database call with child span
-	users, err := fetchUsersFromDB(ctx)
+	users, err := fetchUsersFromDB(ctx, tracer)
 	if err != nil {
 		tracer.RecordError(ctx, err)
-
 		writeErrorResponse(w, "Failed to fetch users", http.StatusInternalServerError)
 		return
 	}
 
-	tracer.AddSpanAttribute(ctx, "users.count", string(len(users)))
-
+	tracer.AddSpanAttribute(ctx, "users.count", strconv.Itoa(len(users)))
 	writeSuccessResponse(w, users)
 }
 
@@ -93,6 +101,19 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get tenant-specific tracer
+	tenantID := r.Header.Get("x-tenant-id")
+	if tenantID == "" {
+		tenantID = "default"
+	}
+
+	tracer, err := tenantManager.GetTracer(tenantID, "user-api")
+	if err != nil {
+		log.Printf("Error getting tracer for tenant %s: %v", tenantID, err)
+		writeErrorResponse(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -106,11 +127,13 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 	tracer.AddSpanAttributes(ctx,
 		attribute.String("user.name", user.Name),
 		attribute.String("user.email", user.Email),
+		attribute.String("tenant.id", tenantID),
 	)
 
 	// Create user in database
-	createdUser, err := createUserInDB(ctx, user)
+	createdUser, err := createUserInDB(ctx, user, tracer)
 	if err != nil {
+		tracer.RecordError(ctx, err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -124,25 +147,10 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(createdUser)
-
 }
 
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	tracer.AddSpanAttribute(ctx, "handler.name", "health")
-
-	response := map[string]interface{}{
-		"status":    "healthy",
-		"timestamp": time.Now().UTC(),
-		"service":   "user-api",
-	}
-
-	writeSuccessResponse(w, response)
-}
-
-// Simulate database operations with child spans
-func fetchUsersFromDB(ctx context.Context) ([]User, error) {
+// Update database functions to accept tracer parameter
+func fetchUsersFromDB(ctx context.Context, tracer *pulse_otel.Tracer) ([]User, error) {
 	return pulse_otel.WithSpanReturnTyped(tracer, ctx, "db.fetch_users", func(ctx context.Context) ([]User, error) {
 		tracer.AddSpanAttributes(ctx,
 			attribute.String("db.operation", "SELECT"),
@@ -162,7 +170,7 @@ func fetchUsersFromDB(ctx context.Context) ([]User, error) {
 	})
 }
 
-func createUserInDB(ctx context.Context, user User) (User, error) {
+func createUserInDB(ctx context.Context, user User, tracer *pulse_otel.Tracer) (User, error) {
 	return pulse_otel.WithSpanReturnTyped(tracer, ctx, "db.create_user", func(ctx context.Context) (User, error) {
 		tracer.AddSpanAttributes(ctx,
 			attribute.String("db.operation", "INSERT"),
@@ -178,6 +186,23 @@ func createUserInDB(ctx context.Context, user User) (User, error) {
 		return user, nil
 	})
 }
+
+// ...existing code...
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	tracer.AddSpanAttribute(ctx, "handler.name", "health")
+
+	response := map[string]interface{}{
+		"status":    "healthy",
+		"timestamp": time.Now().UTC(),
+		"service":   "user-api",
+	}
+
+	writeSuccessResponse(w, response)
+}
+
 func writeSuccessResponse(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
