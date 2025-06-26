@@ -108,60 +108,6 @@ func (rw *responseWriter) Write(data []byte) (int, error) {
 	return n, err
 }
 
-// // GinMiddleware provides Gin framework middleware
-// func GinMiddleware(serviceName string) gin.HandlerFunc {
-// 	tracer := otel.Tracer(serviceName)
-
-// 	return func(c *gin.Context) {
-// 		// Extract trace context
-// 		ctx := otel.GetTextMapPropagator().Extract(c.Request.Context(), propagation.HeaderCarrier(c.Request.Header))
-
-// 		spanName := fmt.Sprintf("%s %s", c.Request.Method, c.FullPath())
-// 		ctx, span := tracer.Start(ctx, spanName,
-// 			trace.WithSpanKind(trace.SpanKindServer),
-// 			trace.WithAttributes(
-// 				semconv.HTTPMethod(c.Request.Method),
-// 				semconv.HTTPURL(c.Request.URL.String()),
-// 				semconv.HTTPRoute(c.FullPath()),
-// 				semconv.HTTPScheme(c.Request.URL.Scheme),
-// 				semconv.HTTPHost(c.Request.Host),
-// 				semconv.HTTPUserAgent(c.Request.UserAgent()),
-// 				semconv.HTTPRequestContentLength(int64(c.Request.ContentLength)),
-// 				attribute.String("gin.handler_name", c.HandlerName()),
-// 			),
-// 		)
-// 		defer span.End()
-
-// 		// Store context in Gin context
-// 		c.Request = c.Request.WithContext(ctx)
-
-// 		start := time.Now()
-// 		c.Next()
-// 		duration := time.Since(start)
-
-// 		// Add response attributes
-// 		span.SetAttributes(
-// 			semconv.HTTPStatusCode(c.Writer.Status()),
-// 			attribute.Float64("http.duration_ms", float64(duration.Nanoseconds())/1000000),
-// 			attribute.Int("gin.writer_size", c.Writer.Size()),
-// 		)
-
-// 		// Record errors if any
-// 		if len(c.Errors) > 0 {
-// 			span.RecordError(c.Errors.Last())
-// 			span.SetStatus(codes.Error, c.Errors.String())
-// 		}
-
-// 		// Set span status based on HTTP status code
-// 		if c.Writer.Status() >= 400 {
-// 			span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", c.Writer.Status()))
-// 		}
-
-// 		// Inject trace context into response headers
-// 		otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(c.Writer.Header()))
-// 	}
-// }
-
 // InstrumentHandler is a convenience function to instrument a single handler
 func InstrumentHandler(serviceName string, pattern string, handler http.HandlerFunc, baseConfig *Config) (string, http.HandlerFunc) {
 	middleware := NewHTTPMiddleware(serviceName, baseConfig)
