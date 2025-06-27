@@ -1,6 +1,7 @@
 package pulse_otel
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -25,6 +26,16 @@ func NewHTTPMiddleware(serviceName string, baseConfig *Config) *HTTPMiddleware {
 		tenantManager: NewTenantManager(baseConfig),
 		serviceName:   serviceName,
 	}
+}
+
+// GetTenantManager returns the tenant manager instance
+func (m *HTTPMiddleware) GetTenantManager() *TenantManager {
+	return m.tenantManager
+}
+
+// Shutdown gracefully shuts down the middleware and its tenant manager
+func (m *HTTPMiddleware) Shutdown(ctx context.Context) error {
+	return m.tenantManager.Shutdown(ctx)
 }
 
 // Handler wraps an http.Handler with opentelemetry instrumentation

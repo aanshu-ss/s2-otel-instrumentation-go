@@ -115,7 +115,7 @@ func (tm *TenantManager) createTenantProvider(tenantID string) (*trace.TracerPro
 	}
 
 	// Create tenant-specific endpoint
-	tenantEndpoint := fmt.Sprintf("http://%s:4318", tenantID)
+	tenantEndpoint := fmt.Sprintf("%s:4318", tenantID)
 
 	// Create OTLP HTTP exporter for this tenant
 	exporter, err := otlptracehttp.New(ctx,
