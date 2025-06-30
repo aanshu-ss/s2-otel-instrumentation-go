@@ -3,6 +3,7 @@ package pulse_otel
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -58,29 +59,29 @@ func (c *Config) AddHeader(key, value string) {
 	c.Headers[key] = value
 }
 
-// TenantManager manages OpenTelemetry providers for multiple tenants
-type TenantManager struct {
-	tenantProviders map[string]*trace.TracerProvider
-	baseConfig      *Config
-	mutex           sync.RWMutex
+// PulseTraceManager manages OpenTelemetry providers for multiple projects
+type PulseTraceManager struct {
+	projectTraceProviders map[string]*trace.TracerProvider
+	baseConfig            *Config
+	mutex                 sync.RWMutex
 }
 
-// NewTenantManager creates a new tenant manager
-func NewTenantManager(baseConfig *Config) *TenantManager {
+// NewPulseTraceManager creates a new pulse trace manager
+func NewPulseTraceManager(baseConfig *Config) *PulseTraceManager {
 	if baseConfig == nil {
 		baseConfig = DefaultConfig()
 	}
 
-	return &TenantManager{
-		tenantProviders: make(map[string]*trace.TracerProvider),
-		baseConfig:      baseConfig,
+	return &PulseTraceManager{
+		projectTraceProviders: make(map[string]*trace.TracerProvider),
+		baseConfig:            baseConfig,
 	}
 }
 
-// GetTracerProvider returns or creates a tracer provider for a specific tenant
-func (tm *TenantManager) GetTracerProvider(tenantID string) (*trace.TracerProvider, error) {
+// GetTracerProvider returns or creates a tracer provider for a specific project
+func (tm *PulseTraceManager) GetTracerProvider(projectID string) (*trace.TracerProvider, error) {
 	tm.mutex.RLock()
-	provider, exists := tm.tenantProviders[tenantID]
+	provider, exists := tm.projectTraceProviders[projectID]
 	tm.mutex.RUnlock()
 
 	if exists {
@@ -91,35 +92,35 @@ func (tm *TenantManager) GetTracerProvider(tenantID string) (*trace.TracerProvid
 	defer tm.mutex.Unlock()
 
 	// Double-check after acquiring write lock
-	if provider, exists := tm.tenantProviders[tenantID]; exists {
+	if provider, exists := tm.projectTraceProviders[projectID]; exists {
 		return provider, nil
 	}
 
-	// Create new provider for tenant
-	provider, err := tm.createTenantProvider(tenantID)
+	// Create new provider for project
+	provider, err := tm.createTraceProvider(projectID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create provider for tenant %s: %w", tenantID, err)
+		return nil, fmt.Errorf("failed to create provider for project %s: %w", projectID, err)
 	}
 
-	tm.tenantProviders[tenantID] = provider
+	tm.projectTraceProviders[projectID] = provider
 	return provider, nil
 }
 
-func (tm *TenantManager) createTenantProvider(tenantID string) (*trace.TracerProvider, error) {
+func (tm *PulseTraceManager) createTraceProvider(projectID string) (*trace.TracerProvider, error) {
 	ctx := context.Background()
 
-	// Create tenant-specific resource
-	res, err := tm.createTenantResource(tenantID)
+	// Create project-specific resource
+	res, err := tm.createProjectTraceResource(projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	// Create tenant-specific endpoint
-	tenantEndpoint := fmt.Sprintf("%s:4318", tenantID)
+	// Form project-specific collector endpoint
+	collectorEndpoint := strings.Replace(OTEL_COLLECTOR_ENDPOINT, "{PROJECTID_PLACEHOLDER}", projectID, 1)
 
-	// Create OTLP HTTP exporter for this tenant
+	// Create OTLP HTTP exporter for this project
 	exporter, err := otlptracehttp.New(ctx,
-		otlptracehttp.WithEndpoint(tenantEndpoint),
+		otlptracehttp.WithEndpoint(collectorEndpoint),
 		otlptracehttp.WithHeaders(tm.baseConfig.Headers),
 		otlptracehttp.WithTimeout(tm.baseConfig.Timeout),
 		otlptracehttp.WithInsecure(),
@@ -138,13 +139,13 @@ func (tm *TenantManager) createTenantProvider(tenantID string) (*trace.TracerPro
 	return provider, nil
 }
 
-func (tm *TenantManager) createTenantResource(tenantID string) (*resource.Resource, error) {
+func (tm *PulseTraceManager) createProjectTraceResource(projectID string) (*resource.Resource, error) {
 	// Start with base attributes
 	attributes := []attribute.KeyValue{
 		semconv.ServiceName(tm.baseConfig.ServiceName),
 		semconv.ServiceVersion(tm.baseConfig.ServiceVersion),
 		semconv.DeploymentEnvironment(tm.baseConfig.Environment),
-		attribute.String("tenant.id", tenantID),
+		attribute.String("project.id", projectID),
 	}
 
 	// Add custom resource attributes
@@ -161,15 +162,15 @@ func (tm *TenantManager) createTenantResource(tenantID string) (*resource.Resour
 	)
 }
 
-// Shutdown gracefully shuts down all tenant providers
-func (tm *TenantManager) Shutdown(ctx context.Context) error {
+// Shutdown gracefully shuts down all project providers
+func (tm *PulseTraceManager) Shutdown(ctx context.Context) error {
 	tm.mutex.Lock()
 	defer tm.mutex.Unlock()
 
 	var errors []error
-	for tenantID, provider := range tm.tenantProviders {
+	for projectID, provider := range tm.projectTraceProviders {
 		if err := provider.Shutdown(ctx); err != nil {
-			errors = append(errors, fmt.Errorf("failed to shutdown provider for tenant %s: %w", tenantID, err))
+			errors = append(errors, fmt.Errorf("failed to shutdown provider for project %s: %w", projectID, err))
 		}
 	}
 
@@ -180,9 +181,9 @@ func (tm *TenantManager) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// GetTracer returns a tenant-specific tracer
-func (tm *TenantManager) GetTracer(tenantID, tracerName string) (*Tracer, error) {
-	provider, err := tm.GetTracerProvider(tenantID)
+// GetTracer returns a project-specific tracer
+func (tm *PulseTraceManager) GetTracer(projectID, tracerName string) (*Tracer, error) {
+	provider, err := tm.GetTracerProvider(projectID)
 	if err != nil {
 		return nil, err
 	}

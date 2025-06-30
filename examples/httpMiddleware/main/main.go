@@ -41,7 +41,7 @@ func main() {
 	config.AddResourceAttribute("api.type", "rest")
 	config.AddResourceAttribute("team", "backend")
 
-	// Create HTTP middleware with tenant support (this creates tenant manager internally)
+	// Create HTTP middleware with project support (this creates project manager internally)
 	middleware = pulse_otel.NewHTTPMiddleware("user-api", config)
 
 	defer func() {
@@ -62,15 +62,15 @@ func main() {
 func getUsersHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Get tenant-specific tracer
-	tenantID := r.Header.Get("x-tenant-id")
-	if tenantID == "" {
-		tenantID = "default"
+	// Get project-specific tracer
+	projectID := r.Header.Get("x-project-id")
+	if projectID == "" {
+		projectID = "default"
 	}
 
-	tracer, err := middleware.GetTenantManager().GetTracer(tenantID, "user-api")
+	tracer, err := middleware.GetPulseTraceManager().GetTracer(projectID, "user-api")
 	if err != nil {
-		log.Printf("Error getting tracer for tenant %s: %v", tenantID, err)
+		log.Printf("Error getting tracer for project %s: %v", projectID, err)
 		writeErrorResponse(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -79,7 +79,7 @@ func getUsersHandler(w http.ResponseWriter, r *http.Request) {
 	tracer.AddSpanAttributes(ctx,
 		attribute.String("handler.name", "getUsers"),
 		attribute.String("operation.type", "read"),
-		attribute.String("tenant.id", tenantID),
+		attribute.String("project.id", projectID),
 	)
 
 	// Simulate database call with child span
@@ -102,15 +102,15 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get tenant-specific tracer
-	tenantID := r.Header.Get("x-tenant-id")
-	if tenantID == "" {
-		tenantID = "default"
+	// Get project-specific tracer
+	projectID := r.Header.Get("x-project-id")
+	if projectID == "" {
+		projectID = "default"
 	}
 
-	tracer, err := middleware.GetTenantManager().GetTracer(tenantID, "user-api")
+	tracer, err := middleware.GetPulseTraceManager().GetTracer(projectID, "user-api")
 	if err != nil {
-		log.Printf("Error getting tracer for tenant %s: %v", tenantID, err)
+		log.Printf("Error getting tracer for project %s: %v", projectID, err)
 		writeErrorResponse(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -125,7 +125,7 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 	tracer.AddSpanAttributes(ctx,
 		attribute.String("user.name", user.Name),
 		attribute.String("user.email", user.Email),
-		attribute.String("tenant.id", tenantID),
+		attribute.String("project.id", projectID),
 	)
 
 	// Create user in database
@@ -190,15 +190,15 @@ func createUserInDB(ctx context.Context, user User, tracer *pulse_otel.Tracer) (
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Get tenant-specific tracer
-	tenantID := r.Header.Get("x-tenant-id")
-	if tenantID == "" {
-		tenantID = "default"
+	// Get project-specific tracer
+	projectID := r.Header.Get("x-project-id")
+	if projectID == "" {
+		projectID = "default"
 	}
 
-	tracer, err := middleware.GetTenantManager().GetTracer(tenantID, "user-api")
+	tracer, err := middleware.GetPulseTraceManager().GetTracer(projectID, "user-api")
 	if err != nil {
-		log.Printf("Error getting tracer for tenant %s: %v", tenantID, err)
+		log.Printf("Error getting tracer for project %s: %v", projectID, err)
 		writeErrorResponse(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

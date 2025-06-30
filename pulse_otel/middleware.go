@@ -1,8 +1,11 @@
 package pulse_otel
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -16,47 +19,54 @@ import (
 
 // HTTPMiddleware provides HTTP instrumentation middleware
 type HTTPMiddleware struct {
-	tenantManager *TenantManager
-	serviceName   string
+	pulseTraceManager *PulseTraceManager
+	serviceName       string
 }
 
-// NewHTTPMiddleware creates a new HTTP middleware with tenant support
+// NewHTTPMiddleware creates a new HTTP middleware with project support
 func NewHTTPMiddleware(serviceName string, baseConfig *Config) *HTTPMiddleware {
 	return &HTTPMiddleware{
-		tenantManager: NewTenantManager(baseConfig),
-		serviceName:   serviceName,
+		pulseTraceManager: NewPulseTraceManager(baseConfig),
+		serviceName:       serviceName,
 	}
 }
 
-// GetTenantManager returns the tenant manager instance
-func (m *HTTPMiddleware) GetTenantManager() *TenantManager {
-	return m.tenantManager
+// GetPulseTraceManager returns the pulse trace manager instance
+func (m *HTTPMiddleware) GetPulseTraceManager() *PulseTraceManager {
+	return m.pulseTraceManager
 }
 
-// Shutdown gracefully shuts down the middleware and its tenant manager
+// Shutdown gracefully shuts down the middleware and its project manager
 func (m *HTTPMiddleware) Shutdown(ctx context.Context) error {
-	return m.tenantManager.Shutdown(ctx)
+	return m.pulseTraceManager.Shutdown(ctx)
 }
 
 // Handler wraps an http.Handler with opentelemetry instrumentation
 func (m *HTTPMiddleware) Handler(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract tenant ID from header
-		tenantID := r.Header.Get("x-tenant-id")
-		if tenantID == "" {
-			tenantID = "default" // fallback to default tenant
+		// Extract project ID from header first
+		projectID := r.Header.Get("project-id")
+
+		// If not found in header, check JSON body
+		if projectID == "" {
+			projectID = m.extractProjectIDFromBody(r)
 		}
 
-		// Get tenant-specific tracer provider
-		provider, err := m.tenantManager.GetTracerProvider(tenantID)
+		// Fallback to default if still not found
+		if projectID == "" {
+			projectID = "default"
+		}
+
+		// Get project-specific tracer provider
+		provider, err := m.pulseTraceManager.GetTracerProvider(projectID)
 		if err != nil {
 			// Log error and use default behavior
-			fmt.Printf("Error getting tenant provider for %s: %v\n", tenantID, err)
+			fmt.Printf("Error getting project provider for %s: %v\n", projectID, err)
 			handler.ServeHTTP(w, r)
 			return
 		}
 
-		// Create tenant-specific tracer
+		// Create project-specific tracer
 		tracer := provider.Tracer(m.serviceName)
 
 		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
@@ -66,7 +76,7 @@ func (m *HTTPMiddleware) Handler(handler http.Handler) http.Handler {
 			trace.WithSpanKind(trace.SpanKindServer),
 			trace.WithAttributes(
 				semconv.HTTPRoute(r.URL.Path),
-				attribute.String("tenant.id", tenantID),
+				attribute.String("project.id", projectID),
 			),
 		)
 		defer span.End()
@@ -95,6 +105,43 @@ func (m *HTTPMiddleware) Handler(handler http.Handler) http.Handler {
 		// Inject trace context into response headers
 		otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(w.Header()))
 	})
+}
+
+// extractProjectIDFromBody attempts to extract project-id from the request body
+func (m *HTTPMiddleware) extractProjectIDFromBody(r *http.Request) string {
+	// Only check for project-id in POST/PUT/PATCH requests with JSON content
+	if r.Method != http.MethodPost && r.Method != http.MethodPut && r.Method != http.MethodPatch {
+		return ""
+	}
+
+	contentType := r.Header.Get("Content-Type")
+	if contentType != "application/json" && contentType != "application/json; charset=utf-8" {
+		return ""
+	}
+
+	// Read the body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return ""
+	}
+
+	// Restore the body for the actual handler to use
+	r.Body = io.NopCloser(bytes.NewBuffer(body))
+
+	// Parse JSON to extract project-id
+	var jsonData map[string]interface{}
+	if err := json.Unmarshal(body, &jsonData); err != nil {
+		return ""
+	}
+
+	// Extract project-id from JSON
+	if projectID, exists := jsonData["project-id"]; exists {
+		if projectIDStr, ok := projectID.(string); ok {
+			return projectIDStr
+		}
+	}
+
+	return ""
 }
 
 func (m *HTTPMiddleware) HandlerFunc(handler http.HandlerFunc) http.HandlerFunc {
