@@ -52,11 +52,6 @@ func (m *HTTPMiddleware) Handler(handler http.Handler) http.Handler {
 			projectID = m.extractProjectIDFromBody(r)
 		}
 
-		// Fallback to default if still not found
-		if projectID == "" {
-			projectID = "default"
-		}
-
 		// Get project-specific tracer provider
 		provider, err := m.pulseTraceManager.GetTracerProvider(projectID)
 		if err != nil {
@@ -66,8 +61,21 @@ func (m *HTTPMiddleware) Handler(handler http.Handler) http.Handler {
 			return
 		}
 
-		// Create project-specific tracer
-		tracer := provider.Tracer(m.serviceName)
+		// Check and update collector reachability safely
+		isCollectorReachable, err := m.pulseTraceManager.CheckAndUpdateCollectorReachability(projectID)
+		if err != nil {
+			fmt.Printf("Error checking collector reachability for project %s: %v\n", projectID, err)
+			handler.ServeHTTP(w, r)
+			return
+		}
+
+		if !isCollectorReachable {
+			// If collector is not reachable, skip tracing
+			handler.ServeHTTP(w, r)
+			return
+		}
+
+		tracer := provider.traceProvider.Tracer(m.serviceName)
 
 		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 
